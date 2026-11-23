@@ -1,0 +1,38 @@
+; Engine configuration file.
+; Kart Racer — a small DS-style kart game for the Galaxy Z Fold.
+
+config_version=5
+
+[application]
+
+config/name="Kart Racer"
+run/main_scene="res://scenes/menu.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+
+[autoload]
+
+Game="*res://scripts/game.gd"
+
+[display]
+
+; Everything renders at a DS-like 512x384 and is scaled up with sharp pixels.
+; "expand" lets the picture grow to fit the Fold's cover and inner screens.
+window/size/viewport_width=512
+window/size/viewport_height=384
+window/size/window_width_override=1024
+window/size/window_height_override=768
+window/stretch/mode="viewport"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=0

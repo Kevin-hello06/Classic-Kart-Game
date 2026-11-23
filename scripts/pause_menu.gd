@@ -10,6 +10,7 @@ var _panel: PanelContainer
 var _music_btn: Button
 var _sfx_btn: Button
 var _layout_btn: Button
+var _controls_btn: Button
 
 
 func _ready() -> void:
@@ -50,8 +51,28 @@ func _ready() -> void:
 	_music_btn = _add(box, "", _toggle_music)
 	_sfx_btn = _add(box, "", _toggle_sfx)
 	_layout_btn = _add(box, "", _cycle_layout)
+	_controls_btn = _add(box, "", _toggle_controls)
 	_add(box, "RESTART", _restart)
+	_add(box, "QUIT CUP", _quit)
 	_refresh()
+
+
+func place_button(on_ds_bottom: bool) -> void:
+	## One screen: top-right corner. Fold two-screen layout: left side of the bottom
+	## screen, about halfway down, away from the fold (which runs along the
+	## top of the bottom screen when the phone is half folded).
+	if on_ds_bottom:
+		_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		_button.offset_left = 10
+		_button.offset_right = 54
+		_button.offset_top = -258
+		_button.offset_bottom = -222
+	else:
+		_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_button.offset_left = -46
+		_button.offset_right = -6
+		_button.offset_top = 3
+		_button.offset_bottom = 29
 
 
 func toggle() -> void:
@@ -65,14 +86,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		toggle()
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("toggle_music"):
-		_toggle_music()
 
 
 func _refresh() -> void:
 	_music_btn.text = "MUSIC: %s" % ("ON" if Game.music_on else "OFF")
 	_sfx_btn.text = "SOUND: %s" % ("ON" if Game.sfx_on else "OFF")
 	_layout_btn.text = "SCREENS: %s" % {"auto": "AUTO", "ds": "DS", "single": "ONE"}[Game.layout]
+	_controls_btn.text = "CONTROLS: %s" % ("DS" if Game.ds_controls else "ROUND")
 
 
 func _add(box: VBoxContainer, text: String, action: Callable) -> Button:
@@ -94,6 +114,11 @@ func _toggle_sfx() -> void:
 	_refresh()
 
 
+func _toggle_controls() -> void:
+	Game.toggle_controls()
+	_refresh()
+
+
 func _cycle_layout() -> void:
 	Game.cycle_layout()
 	_refresh()
@@ -102,3 +127,7 @@ func _cycle_layout() -> void:
 func _restart() -> void:
 	toggle()
 	restart_requested.emit()
+
+
+func _quit() -> void:
+	Game.to_menu()

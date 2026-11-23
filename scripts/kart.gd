@@ -5,10 +5,13 @@ extends CharacterBody3D
 ## Drifting: hold Drift while turning above walking pace. Keep holding and sparks
 ## turn blue, then orange. Let go for a boost (short for blue, longer for orange).
 ## The handling numbers below are the ones to tweak for "feel".
+##
+## Top speed and acceleration are per kart (set from the speed class), and a CPU
+## driver can steer the kart by setting is_cpu and the cpu_* inputs.
 
 signal bumped
 
-const MAX_SPEED := 26.0         # m/s on tarmac (about 94 km/h)
+const MAX_SPEED := 26.0         # default top speed in m/s (100cc, about 94 km/h)
 const OFFROAD_SPEED := 11.0     # top speed on grass
 const BOOST_SPEED := 34.0
 const ACCEL := 15.0
@@ -22,6 +25,20 @@ const CHARGE_BLUE := 0.8        # seconds of drifting for a small boost
 const CHARGE_ORANGE := 1.8      # seconds for a big boost
 
 var controls_enabled := false
+var top_speed := MAX_SPEED
+var accel := ACCEL
+var body_color := Color(0.9, 0.2, 0.2)
+var suit_color := Color(1.0, 0.85, 0.2)
+var is_cpu := false
+var look := ""          # extra kart part: spoiler, wide, bigwheels, antenna, fins
+# Character stat effects (1.0 = average). Set with apply_stats().
+var speed_mult := 1.0
+var turn_mult := 1.0
+var charge_mult := 1.0
+var weight := 3
+var cpu_throttle := 0.0
+var cpu_steer := 0.0
+var cpu_drift := false
 var speed := 0.0
 var heading := 0.0
 var off_road := false
@@ -52,6 +69,8 @@ func _ready() -> void:
 	add_child(col)
 	_build_model()
 
+	if is_cpu:
+		return  # only the player's kart makes engine noise
 	_engine = AudioStreamPlayer.new()
 	var loop: AudioStreamOggVorbis = load("res://assets/audio/engine_loop.ogg")
 	loop.loop = true
@@ -62,6 +81,22 @@ func _ready() -> void:
 	_engine.play()
 
 
+func apply_stats(def: Dictionary, class_speed: float, class_accel: float) -> void:
+	## Character stats (each 1-5, 3 = average) -> handling. Keep the steps small:
+	## Small steps, so every character can win: top speed +-4%, handling (turn rate
+	## and cornering speed) +-6%, acceleration +-40%, drift charge +-30%.
+	var st: Array = def.stats
+	speed_mult = 1.0 + 0.02 * (st[0] - 3)
+	top_speed = class_speed * speed_mult
+	accel = class_accel * (1.0 + 0.2 * (st[1] - 3))
+	turn_mult = 1.0 + 0.03 * (st[2] - 3)
+	charge_mult = 1.0 + 0.15 * (st[3] - 3)
+	weight = st[4]
+	body_color = def.body
+	suit_color = def.suit
+	look = def.look
+
+
 func forward() -> Vector3:
 	return Vector3(-sin(heading), 0.0, -cos(heading))
 
@@ -70,7 +105,11 @@ func _physics_process(delta: float) -> void:
 	var throttle := 0.0
 	var steer := 0.0
 	var drift_held := false
-	if controls_enabled:
+	if controls_enabled and is_cpu:
+		throttle = cpu_throttle
+		steer = cpu_steer
+		drift_held = cpu_drift
+	elif controls_enabled:
 		throttle = Input.get_action_strength("accelerate") - Input.get_action_strength("brake")
 		steer = Input.get_axis("steer_right", "steer_left")
 		drift_held = Input.is_action_pressed("drift")
@@ -86,26 +125,31 @@ func _physics_process(delta: float) -> void:
 	position.y = 0.0
 
 	_update_visuals(delta)
-	_engine.pitch_scale = 0.6 + clampf(absf(speed) / MAX_SPEED, 0.0, 1.4) * 0.9
+	if _engine:
+		_engine.pitch_scale = 0.6 + clampf(absf(speed) / top_speed, 0.0, 1.4) * 0.9
 
 
 func _update_speed(throttle: float, delta: float) -> void:
 	if boost_time > 0.0:
 		boost_time -= delta
-		speed = move_toward(speed, BOOST_SPEED, 60.0 * delta)
+		speed = move_toward(speed, top_speed + BOOST_SPEED - MAX_SPEED, 60.0 * delta)
 		return
 
+	# Light karts lose less speed on grass.
+	var top := OFFROAD_SPEED * (1.0 + 0.06 * (3 - weight)) if off_road else top_speed
+
 	if throttle > 0.0:
-		speed += ACCEL * throttle * delta
+		# Accelerate up to the top speed, never past it (however strong the acceleration).
+		if speed < top:
+			speed = minf(speed + accel * throttle * delta, top)
 	elif throttle < 0.0:
 		if speed > 0.0:
 			speed -= BRAKE * -throttle * delta
 		else:
-			speed = maxf(speed - ACCEL * 0.6 * delta, -REVERSE_SPEED)
+			speed = maxf(speed - accel * 0.6 * delta, -REVERSE_SPEED)
 	else:
 		speed = move_toward(speed, 0.0, COAST_DRAG * delta)
 
-	var top := OFFROAD_SPEED if off_road else MAX_SPEED
 	if speed > top:
 		# Bleed off speed gradually, so running wide onto grass isn't a brick wall.
 		speed = move_toward(speed, top, 25.0 * delta)
@@ -123,16 +167,16 @@ func _update_steering(steer: float, drift_held: bool, delta: float) -> void:
 			_release_drift()
 		else:
 			# Steering into the drift tightens it, steering out widens it.
-			var turn := DRIFT_TURN + 0.6 * steer * drift_dir
+			var turn := (DRIFT_TURN + 0.6 * steer * drift_dir) * turn_mult
 			heading += drift_dir * turn * delta
-			drift_charge += delta * (1.3 if steer * drift_dir > 0.3 else 1.0)
+			drift_charge += delta * (1.3 if steer * drift_dir > 0.3 else 1.0) * charge_mult
 			return
 
 	# Normal grip steering. Needs some speed to turn; reversed when backing up.
 	var grip := clampf(absf(speed) / 8.0, 0.0, 1.0)
-	if speed > MAX_SPEED * 0.8:
+	if speed > top_speed * 0.8:
 		grip *= 0.85  # a touch less twitchy at top speed
-	heading += steer * TURN_RATE * grip * signf(speed) * delta
+	heading += steer * TURN_RATE * turn_mult * grip * signf(speed) * delta
 
 
 func _release_drift() -> void:
@@ -146,7 +190,8 @@ func _release_drift() -> void:
 
 func _boost(seconds: float) -> void:
 	boost_time = maxf(boost_time, seconds)
-	Game.play_sfx("boost", -4.0)
+	if not is_cpu:
+		Game.play_sfx("boost", -4.0)
 
 
 func start_boost(seconds: float) -> void:
@@ -159,7 +204,8 @@ func _handle_collisions() -> void:
 		var hit := get_slide_collision(i)
 		var impact := -forward().dot(hit.get_normal()) * signf(speed)
 		if impact > 0.25:
-			speed *= 1.0 - impact * 0.7
+			# Heavy karts lose less speed when they bump into things.
+			speed *= 1.0 - impact * 0.7 * (1.0 - 0.12 * (weight - 3))
 			drift_dir = 0
 			drift_charge = 0.0
 			if impact > 0.5:
@@ -173,7 +219,7 @@ func _update_visuals(delta: float) -> void:
 	# Body swings out during a drift, and leans into turns.
 	var slide := drift_dir * 0.45
 	_body.rotation.y = lerp_angle(_body.rotation.y, slide, 10.0 * delta)
-	_body.rotation.z = lerpf(_body.rotation.z, -steer_input * 0.06 * clampf(speed / MAX_SPEED, 0, 1), 8.0 * delta)
+	_body.rotation.z = lerpf(_body.rotation.z, -steer_input * 0.06 * clampf(speed / top_speed, 0, 1), 8.0 * delta)
 	_hop = maxf(_hop - delta, 0.0)
 	_body.position.y = sin(_hop / 0.25 * PI) * 0.35 if _hop > 0.0 else 0.0
 
@@ -201,9 +247,9 @@ func _build_model() -> void:
 	_body = Node3D.new()
 	_model.add_child(_body)
 
-	var red := _flat(Color(0.9, 0.2, 0.2))
+	var red := _flat(body_color)
 	var dark := _flat(Color(0.15, 0.15, 0.18))
-	var yellow := _flat(Color(1.0, 0.85, 0.2))
+	var yellow := _flat(suit_color)
 	var skin := _flat(Color(0.95, 0.75, 0.6))
 
 	_part(_body, _box_mesh(Vector3(1.3, 0.35, 1.9)), Vector3(0, 0.45, 0), red)       # chassis
@@ -230,18 +276,28 @@ func _build_model() -> void:
 	wheel.bottom_radius = 0.35
 	wheel.height = 0.3
 	wheel.radial_segments = 8
-	for pos in [Vector3(-0.75, 0.35, -0.75), Vector3(0.75, 0.35, -0.75),
-			Vector3(-0.75, 0.35, 0.75), Vector3(0.75, 0.35, 0.75)]:
+	var big := wheel.duplicate() as CylinderMesh   # chunky rear wheels for "bigwheels"
+	big.top_radius = 0.48
+	big.bottom_radius = 0.48
+	big.height = 0.42
+	var track := 0.9 if look == "wide" else 0.75
+	for pos: Vector3 in [Vector3(-track, 0.35, -0.75), Vector3(track, 0.35, -0.75),
+			Vector3(-track, 0.35, 0.75), Vector3(track, 0.35, 0.75)]:
+		var rear_big: bool = look == "bigwheels" and pos.z > 0.0
+		if rear_big:
+			pos.y = 0.48
 		var pivot := Node3D.new()  # pivot steers; the mesh inside rolls
 		pivot.position = pos
 		_body.add_child(pivot)
 		var roller := Node3D.new()
 		pivot.add_child(roller)
-		var mi := _part(roller, wheel, Vector3.ZERO, dark)
+		var mi := _part(roller, big if rear_big else wheel, Vector3.ZERO, dark)
 		mi.rotation.z = PI / 2
 		_wheels.append(roller)
 		if pos.z < 0.0:
 			_front_wheels.append(pivot)
+
+	_build_look(red, dark, yellow)
 
 	_spark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	for x in [-0.75, 0.75]:
@@ -259,6 +315,30 @@ func _build_model() -> void:
 	_flame = _part(_body, cone, Vector3(0, 0.45, 1.4), flame_mat)
 	_flame.rotation.x = -PI / 2
 	_flame.visible = false
+
+
+func _build_look(body: Material, dark: Material, accent: Material) -> void:
+	## One extra part per character, so karts are easy to tell apart.
+	match look:
+		"spoiler":
+			_part(_body, _box_mesh(Vector3(1.5, 0.08, 0.4)), Vector3(0, 1.15, 1.0), accent)
+			for x in [-0.55, 0.55]:
+				_part(_body, _box_mesh(Vector3(0.08, 0.5, 0.1)), Vector3(x, 0.85, 1.0), dark)
+		"wide":
+			for x in [-0.82, 0.82]:  # side pods
+				_part(_body, _box_mesh(Vector3(0.35, 0.3, 1.3)), Vector3(x, 0.45, 0.0), body)
+		"antenna":
+			var pole := CylinderMesh.new()
+			pole.top_radius = 0.03
+			pole.bottom_radius = 0.03
+			pole.height = 1.4
+			pole.radial_segments = 4
+			_part(_body, pole, Vector3(0.5, 1.3, 0.85), dark)
+			_part(_body, _box_mesh(Vector3(0.05, 0.3, 0.45)), Vector3(0.5, 1.85, 1.05), accent)
+		"fins":
+			for x in [-0.55, 0.55]:
+				var fin := _part(_body, _box_mesh(Vector3(0.08, 0.6, 0.6)), Vector3(x, 0.85, 0.85), body)
+				fin.rotation.x = -0.4
 
 
 func _box_mesh(size: Vector3) -> BoxMesh:

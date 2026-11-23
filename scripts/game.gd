@@ -1,17 +1,62 @@
 extends Node
-## Global helper (autoload "Game"): settings, music, sound effects and controls.
-## Settings are saved to user://settings.cfg so they stick between launches.
+## Global helper (autoload "Game"): settings, music, sound effects, controls, and the
+## Grand Prix: which cup/class is being raced, points, and unlocked progress.
+## Settings and progress are saved to user://settings.cfg between launches.
 
 const SETTINGS_PATH := "user://settings.cfg"
 const LAYOUTS := ["auto", "ds", "single"]
 
 signal layout_changed
 
+const RACE_SCENE := "res://scenes/main.tscn"
+const MENU_SCENE := "res://scenes/menu.tscn"
+const POINTS := [15, 12, 10, 8, 6, 5, 4, 3, 2, 1]   # points for 1st..10th in each race
+
+# Ten characters. You pick one; the other nine are your CPU rivals.
+# stats: speed, accel(eration), handling, drift (boost charge), weight; each 1-5,
+# every character's stats add up to 15 so nobody is simply better.
+# skill: how well that character drives when the CPU controls it (fraction of top speed).
+# look: an extra part on the kart so each one is easy to spot.
+const RACERS := [
+	{"name": "RUBY", "type": "ALL-ROUNDER", "body": Color(0.9, 0.2, 0.2), "suit": Color(1.0, 0.85, 0.2),
+		"stats": [3, 3, 3, 3, 3], "look": "", "skill": 0.97, "lane": 0.31},
+	{"name": "AZURE", "type": "TOP SPEED", "body": Color(0.2, 0.45, 0.95), "suit": Color(0.9, 0.9, 0.95),
+		"stats": [5, 2, 2, 2, 4], "look": "spoiler", "skill": 0.995, "lane": -1.25},
+	{"name": "OLIVE", "type": "NIMBLE", "body": Color(0.35, 0.6, 0.2), "suit": Color(0.95, 0.8, 0.5),
+		"stats": [2, 4, 4, 3, 2], "look": "bigwheels", "skill": 0.98, "lane": 1.25},
+	{"name": "SUNNY", "type": "QUICK START", "body": Color(1.0, 0.75, 0.1), "suit": Color(0.3, 0.3, 0.35),
+		"stats": [2, 5, 3, 3, 2], "look": "antenna", "skill": 0.985, "lane": -0.62},
+	{"name": "CORAL", "type": "LIGHT DRIFTER", "body": Color(1.0, 0.5, 0.45), "suit": Color(0.25, 0.55, 0.6),
+		"stats": [3, 3, 4, 4, 1], "look": "fins", "skill": 0.975, "lane": 0.94},
+	{"name": "VIOLET", "type": "DRIFT ACE", "body": Color(0.6, 0.3, 0.85), "suit": Color(0.95, 0.95, 0.95),
+		"stats": [3, 2, 3, 5, 2], "look": "spoiler", "skill": 0.965, "lane": 0.62},
+	{"name": "MINT", "type": "GRIP", "body": Color(0.45, 0.9, 0.7), "suit": Color(0.35, 0.25, 0.5),
+		"stats": [2, 3, 5, 3, 2], "look": "antenna", "skill": 0.955, "lane": -0.94},
+	{"name": "INDIGO", "type": "HEAVYWEIGHT", "body": Color(0.2, 0.2, 0.55), "suit": Color(1.0, 0.6, 0.2),
+		"stats": [4, 2, 2, 2, 5], "look": "wide", "skill": 0.945, "lane": 1.25},
+	{"name": "SLATE", "type": "BRUISER", "body": Color(0.45, 0.5, 0.55), "suit": Color(0.9, 0.4, 0.2),
+		"stats": [4, 3, 2, 2, 4], "look": "wide", "skill": 0.935, "lane": 0.0},
+	{"name": "COCOA", "type": "PUNCHY", "body": Color(0.5, 0.32, 0.2), "suit": Color(0.95, 0.9, 0.75),
+		"stats": [3, 4, 2, 3, 3], "look": "bigwheels", "skill": 0.925, "lane": -1.25},
+]
+const STAT_NAMES := ["SPEED", "ACCEL", "HANDLING", "DRIFT", "WEIGHT"]
+# CPU skill shifts per class: gentler at 50cc, tougher at 150cc.
+const CLASS_SKILL := [-0.03, 0.0, 0.02]
+
 var music_on := true
 var sfx_on := true
-var best_race := 0.0   # best 3-lap total in seconds, 0 = none yet
-var best_lap := 0.0
+var best_laps := {}    # track name -> best lap time in seconds
+var best_places := {}  # "class:cup" -> best final cup position (1 = won)
 var layout := "auto"   # auto: two screens on the near-square inner screen, one on the cover screen
+var player_char := "RUBY"   # the character you drive
+var ds_controls := true  # D-pad + ABXY + R on the bottom screen (false = round buttons)
+
+# The Grand Prix in progress.
+var cc := 0            # speed class index into TrackData.CLASSES
+var cup := 0           # cup index into TrackData.CUPS
+var race_no := 0       # 0..2 within the cup
+var points := {}       # racer name -> points so far this cup
+var last_race := []    # finishing order of the last race (names)
 
 var ui_font: Font      # crisp pixel font used by all the UI (use sizes 8, 16, 24, 32)
 var ui_theme: Theme
@@ -41,6 +86,12 @@ func _ready() -> void:
 
 
 # ---------------------------------------------------------------- music & sound
+
+func _unhandled_input(event: InputEvent) -> void:
+	# M toggles music anywhere: menu, race, or paused.
+	if event.is_action_pressed("toggle_music"):
+		set_music(not music_on)
+
 
 func start_music() -> void:
 	if not _music.playing:
@@ -90,6 +141,12 @@ func _setup_buses() -> void:
 
 # ---------------------------------------------------------------- display
 
+func toggle_controls() -> void:
+	ds_controls = not ds_controls
+	save_settings()
+	layout_changed.emit()
+
+
 func cycle_layout() -> void:
 	layout = LAYOUTS[(LAYOUTS.find(layout) + 1) % LAYOUTS.size()]
 	save_settings()
@@ -127,17 +184,148 @@ static func _box(bg: Color, border: Color, radius := 4, margin := 6) -> StyleBox
 	return sb
 
 
+# ---------------------------------------------------------------- Grand Prix
+
+func start_cup(class_index: int, cup_index: int) -> void:
+	cc = class_index
+	cup = cup_index
+	race_no = 0
+	points.clear()
+	for r in RACERS:
+		points[r.name] = 0
+	last_race.clear()
+	get_tree().change_scene_to_file(RACE_SCENE)
+
+
+func character(char_name: String) -> Dictionary:
+	for r in RACERS:
+		if r.name == char_name:
+			return r
+	return {}
+
+
+func current_track_index() -> int:
+	return TrackData.CUPS[cup].tracks[race_no]
+
+
+func is_last_race() -> bool:
+	return race_no >= TrackData.CUPS[cup].tracks.size() - 1
+
+
+func add_race_result(order: Array) -> void:
+	## order = racer names from 1st to last. Adds points for this race.
+	last_race = order.duplicate()
+	for i in order.size():
+		points[order[i]] = points.get(order[i], 0) + POINTS[i]
+
+
+func standings() -> Array:
+	## Racer names sorted by points; ties go to whoever placed higher in the last race.
+	var names := points.keys()
+	names.sort_custom(func(a, b):
+		if points[a] != points[b]:
+			return points[a] > points[b]
+		return last_race.find(a) < last_race.find(b))
+	return names
+
+
+func next_race() -> void:
+	race_no += 1
+	get_tree().change_scene_to_file(RACE_SCENE)
+
+
+func to_menu() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file(MENU_SCENE)
+
+
+func finish_cup(place: int) -> Array[String]:
+	## Saves the cup result and returns messages for anything newly unlocked.
+	var before := _unlock_snapshot()
+	var key := "%d:%d" % [cc, cup]
+	if best_places.get(key, 99) > place:
+		best_places[key] = place
+		save_settings()
+	var news: Array[String] = []
+	var after := _unlock_snapshot()
+	for k in after:
+		if after[k] and not before[k]:
+			news.append(k)
+	return news
+
+
+func best_place(class_index: int, cup_index: int) -> int:
+	return best_places.get("%d:%d" % [class_index, cup_index], 0)
+
+
+func is_unlocked(class_index: int, cup_index: int) -> bool:
+	## Cup 2 needs a top-3 finish in Cup 1 at the same class. A class needs top-3
+	## finishes in both cups of the class below it.
+	if class_index > 0:
+		for c in TrackData.CUPS.size():
+			var p := best_place(class_index - 1, c)
+			if p == 0 or p > 3:
+				return false
+	if cup_index > 0:
+		var p := best_place(class_index, cup_index - 1)
+		if p == 0 or p > 3:
+			return false
+	return true
+
+
+func _unlock_snapshot() -> Dictionary:
+	var out := {}
+	for k in TrackData.CLASSES.size():
+		for c in TrackData.CUPS.size():
+			out["%s %s" % [TrackData.CLASSES[k].name, TrackData.CUPS[c].name]] = is_unlocked(k, c)
+	return out
+
+
+# ---------------------------------------------------------------- screens
+
+func use_two_screens() -> bool:
+	## DS two-screen layout on near-square displays (the Fold's 8:7 inner screen),
+	## one screen on wide ones (the 21:9 cover screen), unless the player chose.
+	var win := get_tree().root.size
+	var aspect := float(win.x) / maxf(win.y, 1.0)
+	return layout == "ds" or (layout == "auto" and aspect < ScreenLayout.DS_MAX_ASPECT)
+
+
+func safe_insets(base_size: Vector2) -> Dictionary:
+	## Margins (in game pixels) that keep buttons and text clear of camera holes, notches
+	## and rounded corners. In landscape a phone's camera can end up on either side
+	## (centred punch hole / notch: middle of the edge; corner punch hole: near a corner),
+	## so both sides always get at least SIDE_MARGIN of the width, more if the phone
+	## reports a bigger cutout (its "safe area").
+	const SIDE_MARGIN := 0.045
+	const EDGE_MARGIN := 4.0
+	var win := Vector2(DisplayServer.window_get_size())
+	var pos := Vector2(DisplayServer.window_get_position())
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	var scale := base_size.x / maxf(win.x, 1.0)
+	var l := maxf(safe.position.x - pos.x, 0.0) * scale
+	var r := maxf(pos.x + win.x - safe.end.x, 0.0) * scale
+	var t := maxf(safe.position.y - pos.y, 0.0) * scale
+	var b := maxf(pos.y + win.y - safe.end.y, 0.0) * scale
+	var side := roundf(base_size.x * SIDE_MARGIN)
+	return {"left": maxf(l, side), "right": maxf(r, side),
+			"top": maxf(t, EDGE_MARGIN), "bottom": maxf(b, EDGE_MARGIN)}
+
+
 # ---------------------------------------------------------------- saving
 
-func record_race(total: float, lap: float) -> bool:
-	## Returns true if this race set a new record.
-	var new_record := best_race == 0.0 or total < best_race
-	if new_record:
-		best_race = total
-	if best_lap == 0.0 or lap < best_lap:
-		best_lap = lap
-	save_settings()
-	return new_record
+func best_lap_for(track_name: String) -> float:
+	return best_laps.get(track_name, 0.0)
+
+
+func record_lap(track_name: String, lap: float) -> bool:
+	## Returns true if this is a new best lap for the track.
+	var old: float = best_laps.get(track_name, 0.0)
+	if old == 0.0 or lap < old:
+		best_laps[track_name] = lap
+		save_settings()
+		return true
+	return false
 
 
 func save_settings() -> void:
@@ -145,8 +333,10 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_on", music_on)
 	cfg.set_value("audio", "sfx_on", sfx_on)
 	cfg.set_value("display", "layout", layout)
-	cfg.set_value("records", "best_race", best_race)
-	cfg.set_value("records", "best_lap", best_lap)
+	cfg.set_value("player", "character", player_char)
+	cfg.set_value("display", "ds_controls", ds_controls)
+	cfg.set_value("records", "best_laps", best_laps)
+	cfg.set_value("progress", "best_places", best_places)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -157,8 +347,12 @@ func _load_settings() -> void:
 	music_on = cfg.get_value("audio", "music_on", true)
 	sfx_on = cfg.get_value("audio", "sfx_on", true)
 	layout = cfg.get_value("display", "layout", "auto")
-	best_race = cfg.get_value("records", "best_race", 0.0)
-	best_lap = cfg.get_value("records", "best_lap", 0.0)
+	player_char = cfg.get_value("player", "character", "RUBY")
+	if character(player_char).is_empty():
+		player_char = "RUBY"
+	ds_controls = cfg.get_value("display", "ds_controls", true)
+	best_laps = cfg.get_value("records", "best_laps", {})
+	best_places = cfg.get_value("progress", "best_places", {})
 
 
 # ---------------------------------------------------------------- controls

@@ -46,6 +46,7 @@ func setup(camera: Camera3D, track: Track, kart: Kart, new_hud: Hud,
 	hud = new_hud
 	top.add_child(hud)
 
+
 	hinge.color = Color(0.03, 0.03, 0.05)
 	add_child(hinge)
 
@@ -63,9 +64,9 @@ func setup(camera: Camera3D, track: Track, kart: Kart, new_hud: Hud,
 
 
 func apply_layout() -> void:
-	var win := get_tree().root.size
-	var aspect := float(win.x) / maxf(win.y, 1.0)
-	var want_ds := Game.layout == "ds" or (Game.layout == "auto" and aspect < DS_MAX_ASPECT)
+	if not is_inside_tree():
+		return  # this race is being swapped out for the next scene
+	var want_ds := Game.use_two_screens()
 	var base := Vector2i(512, SCREEN_HEIGHT * 2 + HINGE) if want_ds else Vector2i(512, SCREEN_HEIGHT)
 	if get_tree().root.content_scale_size != base:
 		get_tree().root.content_scale_size = base
@@ -74,6 +75,8 @@ func apply_layout() -> void:
 
 
 func _place() -> void:
+	if not is_inside_tree():
+		return
 	var s := get_viewport_rect().size
 	if is_ds:
 		var h := floorf((s.y - HINGE) / 2.0)
@@ -85,6 +88,17 @@ func _place() -> void:
 	hinge.visible = is_ds
 	bottom.visible = is_ds
 	hud.set_compact(is_ds)
+	if touch:
+		touch.roomy = is_ds
+		# D-pad + ABXY on both screens (ROUND in the pause menu switches to round buttons).
+		touch.ds_style = Game.ds_controls
+		# Over the race on the cover screen, make the controls see-through.
+		touch.modulate.a = 1.0 if is_ds else 0.6
+
+	# Keep text and buttons clear of camera holes, notches and rounded corners
+	# (the race itself still fills the screen).
+	var ins := Game.safe_insets(s)
+	_inset(hud, ins)
 
 	# Touch buttons and the pause menu live on the bottom screen in DS mode.
 	var host: Control = bottom if is_ds else top
@@ -97,8 +111,19 @@ func _place() -> void:
 			host.add_child(c)
 		host.move_child(c, -1)  # keeps pause menu last, on top
 		c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not is_ds:
+			_inset(c, ins)
 	if pause_menu:
 		host.move_child(pause_menu, -1)
+		pause_menu.place_button(is_ds)
+
+
+func _inset(c: Control, ins: Dictionary) -> void:
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.offset_left = ins.left
+	c.offset_right = -ins.right
+	c.offset_top = ins.top
+	c.offset_bottom = -ins.bottom
 
 
 func _set_rect(c: Control, r: Rect2) -> void:

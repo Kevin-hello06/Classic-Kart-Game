@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://cwoui5e8ht8c1"
+path="res://.godot/imported/press_start_8.fnt-c5e131ceee589c793cd95542938dc6a4.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/press_start_8.fnt"
+dest_files=["res://.godot/imported/press_start_8.fnt-c5e131ceee589c793cd95542938dc6a4.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2
