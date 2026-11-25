@@ -1,6 +1,7 @@
 class_name PauseMenu
 extends Control
-## Pause button (top-right) and the menu it opens: Resume, Music on/off,
+## Pause button (top-right on one screen; a DS-style START pill at the bottom-centre
+## of the touch screen in two-screen mode) and the menu it opens: Resume, Music on/off,
 ## Sound on/off, Restart. Esc / P / Start also pause; M toggles music anytime.
 
 signal restart_requested
@@ -61,7 +62,18 @@ func place_button(on_ds_bottom: bool) -> void:
 	## One screen: top-right corner. Fold two-screen layout: left side of the bottom
 	## screen, about halfway down, away from the fold (which runs along the
 	## top of the bottom screen when the phone is half folded).
-	if on_ds_bottom:
+	_set_pill(on_ds_bottom and Game.ds_controls)
+	if on_ds_bottom and Game.ds_controls:
+		# Like START on a DS: a small pill along the bottom edge, centred between
+		# the D-pad and the ABXY buttons so thumbs don't hit it mid-race.
+		# Far from the fold and the camera hole.
+		_button.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_button.offset_left = -24
+		_button.offset_right = 24
+		_button.offset_top = -38
+		_button.offset_bottom = -12
+	elif on_ds_bottom:
+		# Round controls fill the bottom-right, so use the clear left side.
 		_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		_button.offset_left = 10
 		_button.offset_right = 54
@@ -73,6 +85,23 @@ func place_button(on_ds_bottom: bool) -> void:
 		_button.offset_right = -6
 		_button.offset_top = 3
 		_button.offset_bottom = 29
+
+
+func _set_pill(pill: bool) -> void:
+	## DS START-button look: grey rounded pill. Otherwise the normal theme button.
+	for st in ["normal", "hover", "pressed", "focus"]:
+		_button.remove_theme_stylebox_override(st)
+	_button.remove_theme_color_override("font_color")
+	if not pill:
+		return
+	for st in ["normal", "hover", "pressed"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(1.0, 0.85, 0.3) if st == "pressed" else Color(0.16, 0.18, 0.24, 0.95)
+		sb.border_color = Color(0.55, 0.62, 0.75)
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(12)
+		_button.add_theme_stylebox_override(st, sb)
+	_button.add_theme_color_override("font_color", Color.WHITE)
 
 
 func toggle() -> void:

@@ -30,7 +30,8 @@ class Racer:
 	var last_mark := -1
 
 	func mark(n: int, t: float) -> void:
-		var p := int(progress(n))
+		# Shifted by one lap so the grid (behind the start line) counts too.
+		var p := int(progress(n)) + n
 		if p < 0 or pass_times.is_empty():
 			return
 		p = mini(p, pass_times.size() - 1)
@@ -123,7 +124,7 @@ func _spawn_racers() -> void:
 		add_child(k)
 		r.kart = k
 		r.index = track.locate(k.position).index
-		r.pass_times.resize(track.count() * (LAPS + 1))
+		r.pass_times.resize(track.count() * (LAPS + 2))
 		r.pass_times.fill(-1.0)
 		if r.is_player:
 			player = r
@@ -324,7 +325,7 @@ func _racer(racer_name: String) -> Racer:
 func gap_between(front: Racer, back: Racer) -> float:
 	## Seconds `back` is behind `front`: how long ago `front` was where `back` is now.
 	## -1 if unknown (e.g. back is actually ahead).
-	var p := int(back.progress(track.count()))
+	var p := int(back.progress(track.count())) + track.count()
 	if p < 0 or p >= front.pass_times.size() or front.pass_times[p] < 0.0:
 		return -1.0
 	return race_time - front.pass_times[p]

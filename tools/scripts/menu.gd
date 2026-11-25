@@ -295,16 +295,25 @@ func _place() -> void:
 		_set_rect(_hinge, Rect2(0, h, s.x, s.y - 2.0 * h))
 		_set_rect(_bottom, Rect2(0, s.y - h, s.x, h))
 	else:
-		# One wide screen: maps on the left, buttons on the right.
-		var w := floorf(s.x * 0.48)
-		_set_rect(_top, Rect2(0, 0, w, s.y))
-		_set_rect(_bottom, Rect2(w, 0, s.x - w, s.y))
+		# One wide screen: maps on the left, buttons on the right, both kept clear of
+		# camera holes and notches at the sides.
+		var ins := Game.safe_insets(s)
+		var inner := Rect2(ins.left, ins.top, s.x - ins.left - ins.right, s.y - ins.top - ins.bottom)
+		var w := floorf(inner.size.x * 0.48)
+		_set_rect(_top, Rect2(inner.position, Vector2(w, inner.size.y)))
+		_set_rect(_bottom, Rect2(inner.position + Vector2(w, 0), Vector2(inner.size.x - w, inner.size.y)))
 	_hinge.visible = is_ds
+	queue_redraw()
 	var pr := _preview_rect(_top.size)
 	_preview.position = pr.position + Vector2(2, 2)
 	_preview.size = pr.size - Vector2(4, 4)
 	_top.queue_redraw()
 	_bottom.queue_redraw()
+
+
+func _draw() -> void:
+	# Background behind everything, including the margins kept clear at the sides.
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.07, 0.18))
 
 
 func _set_rect(c: Control, r: Rect2) -> void:

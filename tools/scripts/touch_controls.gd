@@ -33,6 +33,9 @@ const DPAD_REACH := 56.0     # centre to end of each D-pad arm
 const DPAD_ARM := 38.0       # arm thickness
 const FACE_R := 22.0         # A/B/X/Y button radius
 const FACE_GAP := 38.0       # diamond centre to each face button
+const HOLE_FROM_RIGHT := 30.0  # Fold 7 inner camera, from the right edge (game px)
+const DS_EDGE := 74.0  # Fold: gap from each side to the D-pad / A button (game px)
+const DS_LIFT := 76.0  # Fold: how far the buttons are raised from their low spot
 const PAD_DARK := Color(0.16, 0.18, 0.24, 0.95)
 const PAD_EDGE := Color(0.55, 0.62, 0.75)
 const FACE := Color(0.82, 0.84, 0.9, 0.95)
@@ -88,19 +91,28 @@ func _centres() -> Dictionary:
 
 
 func _ds_layout() -> Dictionary:
-	## D-pad bottom-left, A/B/X/Y diamond low in the bottom-right corner, R shoulder
-	## above it. R is pulled in from the right edge and everything sits low, so the
-	## right-middle edge stays clear for the Fold's inner camera hole.
+	## D-pad on the left, A/B/X/Y diamond on the right with the R shoulder above it.
+	## Fold bottom screen: both raised (DS_LIFT) and set the same distance in from
+	## each side (DS_EDGE = left edge to D-pad = A to right edge). The diamond sits far
+	## enough in that A stays clear of the Fold's inner camera hole (middle of the
+	## right edge, about HOLE_FROM_RIGHT in). One screen: low, near the edges, as before.
 	var s := size
-	var face := Vector2(s.x - 96, s.y - 80)
+	var face: Vector2
+	var dpad: Vector2
+	if roomy:
+		face = Vector2(s.x - DS_EDGE - (FACE_R + 2.0) - FACE_GAP, s.y - 80.0 - DS_LIFT)
+		dpad = Vector2(DS_EDGE + DPAD_REACH + 2.0, s.y - 86.0 - DS_LIFT)
+	else:
+		face = Vector2(s.x - 96.0, s.y - 80.0)
+		dpad = Vector2(84.0, s.y - 86.0)
 	return {
-		"dpad": Vector2(84, s.y - 86),
+		"dpad": dpad,
 		"face": face,
 		"a": face + Vector2(FACE_GAP, 0),
 		"b": face + Vector2(0, FACE_GAP),
 		"x": face + Vector2(0, -FACE_GAP),
 		"y": face + Vector2(-FACE_GAP, 0),
-		"r": Rect2(s.x - 146, s.y - 180, 80, 32),
+		"r": Rect2(face.x - 50, face.y - 100, 80, 32),
 	}
 
 

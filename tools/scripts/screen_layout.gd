@@ -20,7 +20,6 @@ var hud: Hud
 var touch: TouchControls
 var pause_menu: PauseMenu
 var is_ds := false
-var music_btn: MusicButton   # cover-screen layout only (DS has one on the bottom screen)
 
 var _container := SubViewportContainer.new()
 
@@ -47,14 +46,6 @@ func setup(camera: Camera3D, track: Track, kart: Kart, new_hud: Hud,
 	hud = new_hud
 	top.add_child(hud)
 
-	music_btn = MusicButton.new()
-	top.add_child(music_btn)
-	music_btn.custom_minimum_size = Vector2(40, 30)
-	music_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	music_btn.offset_left = -92
-	music_btn.offset_right = -52
-	music_btn.offset_top = 1
-	music_btn.offset_bottom = 31
 
 	hinge.color = Color(0.03, 0.03, 0.05)
 	add_child(hinge)
@@ -95,8 +86,6 @@ func _place() -> void:
 	else:
 		_set_rect(top, Rect2(Vector2.ZERO, s))
 	hinge.visible = is_ds
-	music_btn.visible = not is_ds
-	top.move_child(music_btn, -1)
 	bottom.visible = is_ds
 	hud.set_compact(is_ds)
 	if touch:
@@ -105,6 +94,11 @@ func _place() -> void:
 		touch.ds_style = Game.ds_controls
 		# Over the race on the cover screen, make the controls see-through.
 		touch.modulate.a = 1.0 if is_ds else 0.6
+
+	# Keep text and buttons clear of camera holes, notches and rounded corners
+	# (the race itself still fills the screen).
+	var ins := Game.safe_insets(s)
+	_inset(hud, ins)
 
 	# Touch buttons and the pause menu live on the bottom screen in DS mode.
 	var host: Control = bottom if is_ds else top
@@ -117,8 +111,19 @@ func _place() -> void:
 			host.add_child(c)
 		host.move_child(c, -1)  # keeps pause menu last, on top
 		c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		if not is_ds:
+			_inset(c, ins)
 	if pause_menu:
 		host.move_child(pause_menu, -1)
+		pause_menu.place_button(is_ds)
+
+
+func _inset(c: Control, ins: Dictionary) -> void:
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.offset_left = ins.left
+	c.offset_right = -ins.right
+	c.offset_top = ins.top
+	c.offset_bottom = -ins.bottom
 
 
 func _set_rect(c: Control, r: Rect2) -> void:

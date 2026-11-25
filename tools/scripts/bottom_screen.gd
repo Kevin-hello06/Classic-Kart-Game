@@ -1,11 +1,13 @@
 class_name BottomScreen
 extends Control
-## The DS "touch screen": a title bar, a music on/off button on the left, the track
-## map with your kart on it in the middle, and the touch buttons below. Drawn in code.
+## The DS "touch screen": a title bar, the track map with your kart on it in the
+## middle, and the touch buttons below. Music is switched from the II pause menu.
 
 const TITLE_H := 28
 const MAP_MAX := Vector2(256, 160)  # map panel size (shrinks to fit if space is short)
-const BUTTON_ZONE := 142            # bottom strip kept clear for the touch buttons
+const BUTTON_ZONE := 142            # bottom strip kept clear below the map
+const CONTROLS_TOP := 262           # how far up the raised touch buttons reach
+const SIDE_CLEAR := 210             # width each button cluster needs at the sides
 const BORDER := Color(0.55, 0.8, 1.0)
 const PANEL_BG := Color(0.03, 0.05, 0.14, 0.88)
 
@@ -20,7 +22,6 @@ var _map_rect := Rect2()
 var _map_scale := 1.0
 var _map_origin := Vector2.ZERO
 var _t := 0.0
-var _music: MusicButton
 
 
 func _ready() -> void:
@@ -28,8 +29,6 @@ func _ready() -> void:
 	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_bg = _pattern()
-	_music = MusicButton.new()
-	add_child(_music)
 	resized.connect(_fit_map)
 
 
@@ -99,12 +98,13 @@ func _fit_map() -> void:
 	var s := size
 	# Centred left to right, sitting low: just above the steering buttons.
 	var top := TITLE_H + 14.0
-	var bottom := s.y - BUTTON_ZONE - 12.0
 	var w := minf(MAP_MAX.x, s.x - 2.0 * 150.0)  # full size on the Fold; narrower on 4:3
+	# On wide screens (the Fold) the buttons sit beside the map; on narrow ones the
+	# map has to stay above them.
+	var beside := (s.x - w) / 2.0 >= SIDE_CLEAR
+	var bottom := s.y - (BUTTON_ZONE if beside else CONTROLS_TOP) - 12.0
 	var h := minf(MAP_MAX.y, bottom - top)
 	_map_rect = Rect2(roundf((s.x - w) / 2.0), bottom - h, w, h)
-	# Music button lines up with the top of the map panel.
-	_music.position = Vector2(10, map_rect().position.y)
 	var lo := track.points[0]
 	var hi := lo
 	for p in track.points:

@@ -5,7 +5,9 @@ extends Control
 
 const TITLE_H := 28
 const MAP_MAX := Vector2(256, 160)  # map panel size (shrinks to fit if space is short)
-const BUTTON_ZONE := 142            # bottom strip kept clear for the touch buttons
+const BUTTON_ZONE := 142            # bottom strip kept clear below the map
+const CONTROLS_TOP := 262           # how far up the raised touch buttons reach
+const SIDE_CLEAR := 210             # width each button cluster needs at the sides
 const BORDER := Color(0.55, 0.8, 1.0)
 const PANEL_BG := Color(0.03, 0.05, 0.14, 0.88)
 
@@ -96,8 +98,11 @@ func _fit_map() -> void:
 	var s := size
 	# Centred left to right, sitting low: just above the steering buttons.
 	var top := TITLE_H + 14.0
-	var bottom := s.y - BUTTON_ZONE - 12.0
 	var w := minf(MAP_MAX.x, s.x - 2.0 * 150.0)  # full size on the Fold; narrower on 4:3
+	# On wide screens (the Fold) the buttons sit beside the map; on narrow ones the
+	# map has to stay above them.
+	var beside := (s.x - w) / 2.0 >= SIDE_CLEAR
+	var bottom := s.y - (BUTTON_ZONE if beside else CONTROLS_TOP) - 12.0
 	var h := minf(MAP_MAX.y, bottom - top)
 	_map_rect = Rect2(roundf((s.x - w) / 2.0), bottom - h, w, h)
 	var lo := track.points[0]

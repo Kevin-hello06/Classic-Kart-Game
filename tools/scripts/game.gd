@@ -291,6 +291,27 @@ func use_two_screens() -> bool:
 	return layout == "ds" or (layout == "auto" and aspect < ScreenLayout.DS_MAX_ASPECT)
 
 
+func safe_insets(base_size: Vector2) -> Dictionary:
+	## Margins (in game pixels) that keep buttons and text clear of camera holes, notches
+	## and rounded corners. In landscape a phone's camera can end up on either side
+	## (centred punch hole / notch: middle of the edge; corner punch hole: near a corner),
+	## so both sides always get at least SIDE_MARGIN of the width, more if the phone
+	## reports a bigger cutout (its "safe area").
+	const SIDE_MARGIN := 0.045
+	const EDGE_MARGIN := 4.0
+	var win := Vector2(DisplayServer.window_get_size())
+	var pos := Vector2(DisplayServer.window_get_position())
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	var scale := base_size.x / maxf(win.x, 1.0)
+	var l := maxf(safe.position.x - pos.x, 0.0) * scale
+	var r := maxf(pos.x + win.x - safe.end.x, 0.0) * scale
+	var t := maxf(safe.position.y - pos.y, 0.0) * scale
+	var b := maxf(pos.y + win.y - safe.end.y, 0.0) * scale
+	var side := roundf(base_size.x * SIDE_MARGIN)
+	return {"left": maxf(l, side), "right": maxf(r, side),
+			"top": maxf(t, EDGE_MARGIN), "bottom": maxf(b, EDGE_MARGIN)}
+
+
 # ---------------------------------------------------------------- saving
 
 func best_lap_for(track_name: String) -> float:

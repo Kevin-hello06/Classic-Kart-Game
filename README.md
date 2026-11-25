@@ -68,10 +68,12 @@ On the Fold's inner screen (and in a laptop window) the game uses two screens, l
   down the left side, a speed and drift/boost meter panel on the right, and big messages
   (countdown, FINISH!).
 - **Bottom screen:** the track map with your kart marker in the middle, the pause button
-  (II) on the left, and the touch controls. **CONTROLS** in the
+  (II, a DS-style START pill at the bottom-centre), and the touch controls. **CONTROLS** in the
   pause menu picks DS style (D-pad, A/B/X/Y, R) or ROUND (big round buttons).
-  Both keep the right-middle edge empty, because the Fold's inner camera hole sits
-  there. To move or resize them, edit `_ds_layout()`, `_centres()` and `ROOMY_RADIUS`
+  On the Fold the DS-style buttons sit raised, a bit over halfway down, the D-pad and A the
+  same distance from each side (DS_EDGE, DS_LIFT in touch_controls.gd), with
+  A/B/X/Y and R pulled in from the edge. Both styles keep the right-middle edge empty,
+  because the Fold's inner camera hole sits there. To move or resize them, edit `_ds_layout()`, `_centres()` and `ROOMY_RADIUS`
   in `touch_controls.gd`.
 - A dark gap between them sits on the hinge, so in Flex mode (half folded) the fold
   runs between the screens instead of through the race.
@@ -97,7 +99,7 @@ every letter pixel stays square. Use font sizes 8, 16, 24 or 32 only.
 | Accelerate | A (ROUND: GAS) | ↑ or W | A |
 | Drift (also accelerates) | R (ROUND: DRIFT) | Space or Shift | R1 |
 | Brake / reverse | B (ROUND: BRAKE) | ↓ or S | X |
-| Pause menu | II (left side of the bottom screen; top right on one screen) | Esc or P | Start |
+| Pause menu | II (bottom-centre of the bottom screen, like DS START; left side with ROUND controls; top right on one screen) | Esc or P | Start |
 | Music on/off | II pause menu during races (note button on the title menu) | M (anywhere) | — |
 
 **Drifting:** hold DRIFT while turning. Sparks go white, then blue, then orange.
