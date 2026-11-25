@@ -9,6 +9,7 @@ const BORDER := Color(0.55, 0.8, 1.0)
 const PANEL_BG := Color(0.03, 0.05, 0.14, 0.72)
 const DIM := Color(0.6, 0.7, 0.85)
 const HIGHLIGHT := Color(1.0, 0.9, 0.3)
+const FASTEST := Color(0.85, 0.5, 1.0)  # race fastest lap (purple)
 
 var kart: Kart
 var lap := 1
@@ -18,6 +19,10 @@ var best_lap := 0.0
 var lap_times: Array[float] = []
 var compact := false   # true on the DS top screen (no pause button up here)
 var place := 1         # your current race position
+var fastest_name := ""   # fastest lap of the race so far
+var fastest_time := 0.0
+var fastest_mine := false
+var _fastest_flash := 0.0  # blinks for a few seconds after a new fastest lap
 var gap_ahead := -1.0   # seconds behind the kart in front (-1 = none)
 var gap_behind := -1.0  # seconds the kart behind is behind you
 var ahead_name := ""
@@ -59,6 +64,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_fastest_flash = maxf(_fastest_flash - delta, 0.0)
 	queue_redraw()
 
 
@@ -71,6 +77,13 @@ func update_race(new_lap: int, total: int, race_time: float, new_lap_time: float
 	best_lap = best
 	_lap.text = "LAP %d/%d" % [mini(lap, laps), laps]
 	_time.text = Game.format_time(race_time)
+
+
+func set_fastest(who: String, time: float, mine: bool) -> void:
+	fastest_name = who
+	fastest_time = time
+	fastest_mine = mine
+	_fastest_flash = 3.0
 
 
 func set_gaps(a_name: String, a_gap: float, b_name: String, b_gap: float) -> void:
@@ -137,10 +150,22 @@ func _draw() -> void:
 		rows.append(["AHEAD ", ahead_name, gap_ahead, Color(1.0, 0.55, 0.5)])
 	if gap_behind >= 0.0:
 		rows.append(["BEHIND", behind_name, gap_behind, Color(0.6, 1.0, 0.7)])
+	if fastest_time > 0.0:
+		rows.append(["FL", fastest_name, fastest_time, FASTEST])
 	if not rows.is_empty():
 		var gp := Rect2(8, lp.end.y + 6, PANEL_W + 40, 8 + rows.size() * 14)
 		_panel(gp)
 		for i in rows.size():
+			if rows[i][0] == "FL":
+				# Fastest lap of the race (purple, like F1); blinks when someone beats it.
+				var y2 := gp.position.y + 16 + i * 14
+				if _fastest_flash > 0.0 and int(_t * 6.0) % 2 == 0:
+					continue
+				var who_col := Color(1.0, 0.9, 0.3) if fastest_mine else Color.WHITE
+				draw_string(f, Vector2(gp.position.x + 6, y2), "FL", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, FASTEST)
+				draw_string(f, Vector2(gp.position.x + 26, y2), fastest_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, who_col)
+				_text_right(f, Vector2(gp.end.x - 6, y2), Game.format_time(fastest_time), 8, FASTEST)
+				continue
 			var y := gp.position.y + 16 + i * 14
 			draw_string(f, Vector2(gp.position.x + 6, y), rows[i][0], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, DIM)
 			draw_string(f, Vector2(gp.position.x + 62, y), rows[i][1], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color.WHITE)

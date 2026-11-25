@@ -46,7 +46,12 @@ Drifting through long corners is clearly faster (the mini-turbos add up).
 - After START you pick your driver from ten characters; the other nine are your CPU rivals.
   Each cup is 4 races of 3 laps. Points per race: 15, 12, 10, 8, 6, 5, 4, 3, 2, 1.
   Most points after 4 races wins the cup.
-- You start the first race at the back of the 10-kart grid. Later races line up by the standings, leader on pole.
+- You start the first race at the back of the 10-kart grid. Later races line up in the finishing
+  order of the previous race, its winner on pole.
+- Fastest lap of the race (anyone's): shown live as the purple FL row under the gaps
+  (blinks when someone beats it, chime if it's you), and on the results screen with its lap.
+- After every race: the results, then tap for the cup standings (total points, points just
+  scored, and places moved: ^2 = up two, v1 = down one). The last race adds the trophy and unlocks.
 - **Unlocks (finish in the top 3 = a trophy):**
   - Top 3 in a cup unlocks the next cup at the same class (Sprout → Comet → Gear → Crown).
   - Top 3 in all four cups unlocks the next class (50cc → 100cc → 150cc).

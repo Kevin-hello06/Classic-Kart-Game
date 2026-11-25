@@ -1,7 +1,8 @@
 extends Node3D
 ## One race of a Grand Prix: builds the track and ten karts (you + nine CPU racers),
 ## runs the countdown, tracks laps and positions for everyone, then shows the race
-## results with points and, after the last race, the cup standings and unlocks.
+## results with points, then the cup standings after every race (trophy and unlocks
+## after the last one).
 ##
 ## Laps only count if a kart passes the three checkpoints (quarter, half and
 ## three-quarter way round) in order, so cutting back across the line doesn't work.
@@ -59,6 +60,10 @@ var screens: ScreenLayout
 
 var race_time := 0.0
 var best_lap := 0.0
+# Fastest lap of this race by anyone: who, how long, and which lap.
+var fastest_name := ""
+var fastest_time := 0.0
+var fastest_lap_no := 0
 var countdown := 3.5
 var final_order: Array = []
 var _last_count := -1
@@ -101,8 +106,8 @@ func _ready() -> void:
 
 func _spawn_racers() -> void:
 	var cls: Dictionary = TrackData.CLASSES[Game.cc]
-	# Grid: first race in roster order with you at the back; later races by the
-	# current standings, leader on pole.
+	# Grid: first race in roster order with you at the back; later races in the
+	# finishing order of the previous race, its winner on pole.
 	var order: Array = []
 	if Game.race_no == 0:
 		for d in Game.RACERS:
@@ -110,7 +115,7 @@ func _spawn_racers() -> void:
 				order.append(d.name)
 		order.append(Game.player_char)
 	else:
-		order = Game.standings()
+		order = Game.last_race.duplicate()
 
 	for slot in order.size():
 		var def := Game.character(order[slot])
@@ -169,12 +174,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (tapped or event.is_action_pressed("ui_accept")):
 		return
 	if state == State.RESULTS:
-		if Game.is_last_race():
-			_show_standings()
-		else:
-			Game.next_race()
-	else:
+		_show_standings()
+	elif Game.is_last_race():
 		Game.to_menu()
+	else:
+		Game.next_race()
 
 
 func restart() -> void:
@@ -233,6 +237,13 @@ func _update_racer(r: Racer, delta: float) -> void:
 func _complete_lap(r: Racer) -> void:
 	r.next_cp = 1
 	r.lap_times.append(r.lap_time)
+	if fastest_time == 0.0 or r.lap_time < fastest_time:
+		fastest_name = r.name
+		fastest_time = r.lap_time
+		fastest_lap_no = r.lap
+		hud.set_fastest(fastest_name, fastest_time, r.is_player)
+		if r.is_player and r.lap > 1:
+			Game.play_sfx("boost", -4.0)
 	if r.is_player:
 		if Game.record_lap(track.def.name, r.lap_time) or best_lap == 0.0:
 			best_lap = Game.best_lap_for(track.def.name)
@@ -291,28 +302,44 @@ func _show_results() -> void:
 		var mark := ">" if r.is_player else " "
 		lines.append("%s%2d %-6s %s +%d" % [mark, i + 1, r.name, t, Game.POINTS[i]])
 	lines.append("")
-	lines.append("TAP FOR STANDINGS" if Game.is_last_race() else "TAP FOR NEXT RACE")
+	if fastest_time > 0.0:
+		lines.append("%sFASTEST %-6s %s L%d" % [">" if fastest_name == player.name else " ",
+				fastest_name, Game.format_time(fastest_time), fastest_lap_no])
+	lines.append("TAP FOR STANDINGS")
 	hud.show_message("RACE %d RESULTS" % (Game.race_no + 1), "\n".join(lines))
 
 
 func _show_standings() -> void:
+	## Shown after every race: total points, what each racer just scored, and how
+	## many places they moved (^ up, v down). After the last race: trophy and unlocks.
 	state = State.STANDINGS
 	_wait = 1.0
 	var table := Game.standings()
 	var lines: Array[String] = []
 	for i in table.size():
-		var mark := ">" if table[i] == Game.player_char else " "
-		lines.append("%s%2d %-6s %3d PTS" % [mark, i + 1, table[i], Game.points[table[i]]])
+		var who: String = table[i]
+		var mark := ">" if who == Game.player_char else " "
+		var move := "  "
+		var before := Game.prev_standings.find(who)
+		if before >= 0 and before != i:
+			move = ("^" if before > i else "v") + str(absi(before - i))
+		lines.append("%s%2d %-6s %3d +%-2d %s" % [mark, i + 1, who, Game.points[who],
+				Game.last_points.get(who, 0), move])
 	var place := table.find(Game.player_char) + 1
 	lines.append("")
-	lines.append(["GOLD TROPHY!", "SILVER TROPHY!", "BRONZE TROPHY!"][place - 1] if place <= 3
-			else "TOP 3 TO UNLOCK MORE")
-	for unlocked in Game.finish_cup(place):
-		lines.append("NEW: " + unlocked)
-	lines.append("TAP FOR MENU")
-	hud.show_message(TrackData.CUPS[Game.cup].name + "  " + _ordinal(place), "\n".join(lines))
-	if place <= 3:
-		Game.play_sfx("finish")
+	if Game.is_last_race():
+		lines.append(["GOLD TROPHY!", "SILVER TROPHY!", "BRONZE TROPHY!"][place - 1] if place <= 3
+				else "TOP 3 TO UNLOCK MORE")
+		for unlocked in Game.finish_cup(place):
+			lines.append("NEW: " + unlocked)
+		lines.append("TAP FOR MENU")
+		hud.show_message(TrackData.CUPS[Game.cup].name + "  " + _ordinal(place), "\n".join(lines))
+		if place <= 3:
+			Game.play_sfx("finish")
+	else:
+		lines.append("TAP FOR RACE %d" % (Game.race_no + 2))
+		hud.show_message("STANDINGS  %d/%d" % [Game.race_no + 1, TrackData.CUPS[Game.cup].tracks.size()],
+				"\n".join(lines))
 
 
 func _racer(racer_name: String) -> Racer:

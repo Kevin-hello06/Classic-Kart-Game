@@ -56,7 +56,9 @@ var cc := 0            # speed class index into TrackData.CLASSES
 var cup := 0           # cup index into TrackData.CUPS
 var race_no := 0       # 0..2 within the cup
 var points := {}       # racer name -> points so far this cup
-var last_race := []    # finishing order of the last race (names)
+var last_race := []    # finishing order of the last race (names); next race's grid
+var prev_standings := []  # standings before the last race, to show who moved up/down
+var last_points := {}  # points each racer scored in the last race
 
 var ui_font: Font      # crisp pixel font used by all the UI (use sizes 8, 16, 24, 32)
 var ui_theme: Theme
@@ -194,6 +196,8 @@ func start_cup(class_index: int, cup_index: int) -> void:
 	for r in RACERS:
 		points[r.name] = 0
 	last_race.clear()
+	prev_standings.clear()
+	last_points.clear()
 	get_tree().change_scene_to_file(RACE_SCENE)
 
 
@@ -214,8 +218,11 @@ func is_last_race() -> bool:
 
 func add_race_result(order: Array) -> void:
 	## order = racer names from 1st to last. Adds points for this race.
+	prev_standings = standings() if not last_race.is_empty() else []
 	last_race = order.duplicate()
+	last_points.clear()
 	for i in order.size():
+		last_points[order[i]] = POINTS[i]
 		points[order[i]] = points.get(order[i], 0) + POINTS[i]
 
 
